@@ -118,3 +118,129 @@ fn main() {
                         let state: State<AppState> = app.state();
                         if let Some(sc_mgr) = &state.shortcuts {
                             if let Some(ws_id) = sc_mgr.get_workspace_for_shortcut(&shortcut_str) {
+                                info!(
+                                    "Executing workspace '{}' via global hotkey '{}'",
+                                    ws_id, shortcut_str
+                                );
+                                let handle = app.clone();
+                                std::thread::spawn(move || {
+                                    let state: State<AppState> = handle.state();
+                                    if let Err(e) = execute_workspace_internal(&handle, &state, &ws_id) {
+                                        warn!("Hotkey execution failed for workspace {}: {}", ws_id, e);
+                                    }
+                                });
+                            }
+                        }
+                    }
+                })
+                .build(),
+        )
+        .setup(|app| {
+            let storage_dir = StorageManager::default_dir();
+            let storage_manager = StorageManager::new(storage_dir);
+
+            let provider = TauriShortcutProvider::new(app.handle().clone());
+            let shortcut_manager = Arc::new(ShortcutManager::new(provider));
+            let engine = ExecutionEngine::new();
+
+            // Load stored workspaces and register enabled shortcuts
+            if let Ok(data) = storage_manager.load() {
+                for ws in &data.workspaces {
+                    if ws.enabled {
+                        if let Some(sc) = &ws.shortcut {
+                            if !sc.trim().is_empty() {
+                                if let Err(e) =
+                                    shortcut_manager.bind_workspace_shortcut(&ws.id, sc)
+                                {
+                                    warn!(
+                                        "Could not register shortcut '{}' for workspace '{}': {}",
+                                        sc, ws.name, e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Register global hotkey Ctrl+Alt+9 for spike testing
+            if let Ok(spike_sc) = "ctrl+alt+9".parse::<Shortcut>() {
+                let _ = app.global_shortcut().register(spike_sc);
+            }
+
+            // Manage AppState with shortcut_manager and engine
+            app.manage(AppState {
+                storage: Mutex::new(storage_manager),
+                shortcuts: Some(Arc::clone(&shortcut_manager)),
+                engine,
+            });
+
+            // Check if CLI flags were passed for automated testing / spikes
+            let args: Vec<String> = std::env::args().collect();
+            if args.iter().any(|a| a == "--spike") {
+                info!("CLI flag --spike detected, running spike immediately...");
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    window_spike::run_spike(&handle);
+                });
+            }
+
+            if args.iter().any(|a| a == "--test-cycle") {
+                info!("CLI flag --test-cycle detected, testing 5x open/close webview lifecycle...");
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    for i in 1..=5 {
+                        std::thread::sleep(std::time::Duration::from_millis(1500));
+                        info!("Cycle {}: Opening main window...", i);
+                        show_main_window(&handle);
+                        std::thread::sleep(std::time::Duration::from_millis(2000));
+                        info!("Cycle {}: Closing and destroying main window...", i);
+                        if let Some(win) = handle.get_webview_window("main") {
+                            let _ = win.destroy();
+                        }
+                    }
+                    info!("5x open/close cycle complete!");
+                });
+            }
+
+            // Set up tray icon event handler
+            let tray = app.tray_by_id("main-tray").expect("tray not found");
+            let handle = app.handle().clone();
+            tray.on_tray_icon_event(move |_tray, event| {
+                if let TrayIconEvent::Click { button, .. } = event {
+                    if button == tauri::tray::MouseButton::Left {
+                        show_main_window(&handle);
+                    }
+                }
+            });
+
+            info!("Layr started (tray only, no window)");
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        match &event {
+            RunEvent::WindowEvent {
+                label,
+                event: WindowEvent::CloseRequested { .. },
+                ..
+            } => {
+                if label == "main" {
+                    // Destroy the webview window on close to free memory
+                    if let Some(win) = app_handle.get_webview_window("main") {
+                        info!("Destroying main window webview");
+                        let _ = win.destroy();
+                    }
+                }
+            }
+            RunEvent::ExitRequested { api, .. } => {
+                // Prevent the app from exiting when the last window closes
+                api.prevent_exit();
+            }
+            _ => {}
+        }
+    });
+}
