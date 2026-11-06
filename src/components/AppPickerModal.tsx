@@ -109,3 +109,122 @@ export const AppPickerModal: React.FC<AppPickerModalProps> = ({
       <div className="space-y-4">
         {/* Tab buttons */}
         <div className="flex border-b border-zinc-800/80 pb-2 gap-2 text-xs font-medium">
+          <button
+            onClick={() => setTab("presets")}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              tab === "presets"
+                ? "bg-zinc-800 text-emerald-400 border border-zinc-750"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Presets
+          </button>
+          <button
+            onClick={() => setTab("installed")}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              tab === "installed"
+                ? "bg-zinc-800 text-emerald-400 border border-zinc-750"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Start Menu Apps
+          </button>
+          <button
+            onClick={() => setTab("manual")}
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              tab === "manual"
+                ? "bg-zinc-800 text-emerald-400 border border-zinc-750"
+                : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            Custom Path
+          </button>
+        </div>
+
+        {tab !== "manual" ? (
+          <div>
+            <div className="mb-3">
+              <Input
+                placeholder="Search applications..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+              {loading ? (
+                <div className="py-8 text-center text-xs text-zinc-500">
+                  Scanning applications...
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="py-8 text-center text-xs text-zinc-500">
+                  No applications found matching your query.
+                </div>
+              ) : (
+                filtered.map((app, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleSelectDiscovered(app)}
+                    className="w-full text-left p-2.5 rounded-md bg-zinc-900/60 hover:bg-zinc-800/80 border border-zinc-800 hover:border-zinc-700 flex items-center justify-between transition-colors group"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-zinc-200 group-hover:text-emerald-400 transition-colors">
+                        {app.name}
+                      </div>
+                      <div className="text-[10px] font-mono text-zinc-500 truncate max-w-sm">
+                        {app.executable_path}
+                      </div>
+                    </div>
+                    {app.supports_url && (
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-400 border border-emerald-800/50">
+                        Browser
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleAddManual} className="space-y-3">
+            <Input
+              label="Application Name"
+              placeholder="e.g. My Custom Tool"
+              value={manualName}
+              onChange={(e) => setManualName(e.target.value)}
+              required
+            />
+            <Input
+              label="Executable Path"
+              placeholder="C:\Tools\app.exe"
+              value={manualPath}
+              onChange={(e) => setManualPath(e.target.value)}
+              required
+            />
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="checkbox"
+                id="supportsUrl"
+                checked={manualSupportsUrl}
+                onChange={(e) => setManualSupportsUrl(e.target.checked)}
+                className="rounded border-zinc-800 text-emerald-500 focus:ring-emerald-500/40 bg-zinc-900"
+              />
+              <label htmlFor="supportsUrl" className="text-xs text-zinc-400 select-none">
+                This application accepts URL / browser arguments
+              </label>
+            </div>
+            <div className="pt-2 flex justify-end gap-2">
+              <Button type="button" variant="secondary" onClick={onClose}>
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary">
+                Add Application
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+    </Dialog>
+  );
+};
+
